@@ -151,25 +151,7 @@ export default function PositionsPage() {
             <p className="muted" style={{ marginTop: 10, maxWidth: 680, fontSize: "0.95rem" }}>$1k+ positions from top prediction traders</p>
           </div>
 
-          <div className="page-header-actions" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <Link
-              href="/"
-              style={{
-                padding: "7px 14px",
-                borderRadius: "4px",
-                color: "var(--text)",
-                background: "transparent",
-                border: "1px solid var(--border)",
-                fontSize: "0.85rem",
-                fontWeight: 500,
-                fontFamily: "Inter, var(--font-sans), sans-serif",
-                textDecoration: "none",
-                transition: "background-color 120ms ease, border-color 120ms ease"
-              }}
-            >
-              Leaderboard
-            </Link>
-          </div>
+
         </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "12px", marginBottom: 18, alignItems: "center" }}>

@@ -96,7 +96,7 @@ export function TrendingMarketCard({ market }: { market: TrendingMarket }) {
         </span>
       </div>
 
-      {/* Stats row: left (Volume · traders count), right (Inflow · EndsIn) */}
+      {/* Stats row: live market volume, activity availability, and expiry */}
       <div style={{
         display: "flex",
         justifyContent: "space-between",
@@ -108,12 +108,12 @@ export function TrendingMarketCard({ market }: { market: TrendingMarket }) {
         <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
           <span style={{ fontWeight: 700, color: "var(--text)" }}>{market.volumeLabel}</span>
           <span>·</span>
-          <span>{market.traders.length} traders</span>
+          <span>{market.traders.length ? `${market.traders.length} traders` : "Trader data unavailable"}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
           <span style={{
             fontWeight: 700,
-            color: market.momentum.startsWith("+") ? "var(--green)" : "var(--red)"
+            color: market.momentum === "—" ? "var(--muted)" : market.momentum.startsWith("+") ? "var(--green)" : "var(--red)"
           }}>
             {market.momentum}
           </span>
@@ -130,12 +130,14 @@ export function TrendingMarketCard({ market }: { market: TrendingMarket }) {
               <tr>
                 <th style={{ textAlign: "left", color: "var(--muted)", fontWeight: 700, fontSize: "0.72rem", paddingBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Trader</th>
                 <th style={{ textAlign: "left", color: "var(--muted)", fontWeight: 700, fontSize: "0.72rem", paddingBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>TXs</th>
-                <th style={{ textAlign: "left", color: "var(--muted)", fontWeight: 700, fontSize: "0.72rem", paddingBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Inflow</th>
+                <th style={{ textAlign: "left", color: "var(--muted)", fontWeight: 700, fontSize: "0.72rem", paddingBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Trader flow</th>
                 <th style={{ textAlign: "right", color: "var(--muted)", fontWeight: 700, fontSize: "0.72rem", paddingBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Last</th>
               </tr>
             </thead>
             <tbody>
-              {market.traders.slice(0, 3).map((t, idx) => {
+              {market.traders.length === 0 ? (
+                <tr><td colSpan={4} style={{ padding: "8px 0", color: "var(--muted)" }}>PMXT market data does not include trader activity.</td></tr>
+              ) : market.traders.slice(0, 3).map((t, idx) => {
                 const [yesTxs, noTxs] = t.txs.split("/");
                 const isPositiveInflow = t.inflow >= 0;
                 const inflowText = isPositiveInflow

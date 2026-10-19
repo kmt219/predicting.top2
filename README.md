@@ -7,8 +7,8 @@ Minimal MVP clone of `predicting.top` built with Next.js App Router.
 - Homepage leaderboard
 - Trader profile pages
 - Top positions page
-- Mock-backed API routes under `/api/v1`
-- Shared data layer ready to swap for real ingestion
+- PMXT-backed live market and Polymarket trade routes under `/api/v1`
+- Sample-backed trader rankings, profiles, and positions
 - Planning docs for competitive gap analysis and sprinting
 
 ## Run locally
@@ -17,6 +17,8 @@ Minimal MVP clone of `predicting.top` built with Next.js App Router.
 npm install
 npm run dev
 ```
+
+Set `PMXT_API_KEY` in `.env.local` for PMXT market and trade data. Add the same variable to your hosting provider's production environment before redeploying.
 
 ## Routes
 
@@ -37,12 +39,7 @@ npm run dev
 
 ## Next step
 
-Replace `lib/mock-data.ts` with:
-
-- normalized database models
-- ingestion workers
-- cached query layer
-- live platform adapters for Polymarket, Kalshi, and Opinion Labs
+PMXT's public feed does not provide third-party trader P&L or holdings. Replace the sample-backed trader data in `lib/mock-data.ts` only if you add a source that provides those fields.
 
 ## Planning Documents
 

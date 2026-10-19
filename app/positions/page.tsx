@@ -145,7 +145,7 @@ export default function PositionsPage() {
         <div className="page-header-row">
           <div>
             <h1 className="page-title">Top Positions</h1>
-            <p className="muted" style={{ marginTop: 10, maxWidth: 680, fontSize: "0.95rem" }}>$1k+ positions from top prediction traders</p>
+            <p className="muted" style={{ marginTop: 10, maxWidth: 680, fontSize: "0.95rem" }}>Sample positions; PMXT does not provide public holdings for other traders.</p>
           </div>
 
           <div className="page-header-actions" style={{ display: "flex", gap: 10, alignItems: "center" }}>

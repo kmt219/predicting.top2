@@ -55,8 +55,8 @@ export function RecentTrades({ items, detailed = false }: { items: RecentTrade[]
               {items.map((trade, idx) => {
                 const trader = getTraderProfile(trade.traderSlug);
                 return (
-                  <tr key={`${trade.id}-${idx}`} className={trade.traderScore >= 0 ? "positive" : "negative"}>
-                    <td><Link href={`/account/${trade.traderSlug}`} style={{ color: '#00b7ff', textDecoration: 'underline', cursor: 'pointer' }}>{trade.traderName}</Link></td>
+                  <tr key={`${trade.id}-${idx}`} className={trade.traderScore == null ? "" : trade.traderScore >= 0 ? "positive" : "negative"}>
+                    <td>{trade.traderSlug === "unknown" ? trade.traderName : <Link href={`/account/${trade.traderSlug}`} style={{ color: '#00b7ff', textDecoration: 'underline', cursor: 'pointer' }}>{trade.traderName}</Link>}</td>
                     <td>{trader ? trader.smartScore.toFixed(1) : "-"}</td>
                     <td>{trader ? trader.sharpe.toFixed(2) : "-"}</td>
                     <td>{trade.marketTitle}</td>
@@ -78,10 +78,10 @@ export function RecentTrades({ items, detailed = false }: { items: RecentTrade[]
       <div className="section-heading"><div><p className="eyebrow">Flow</p><h2>Recent Trades</h2></div></div>
       <div className="stack-list">
         {items.map((trade, idx) => (
-          <div className={`trade-card ${trade.traderScore >= 0 ? "trade-positive" : "trade-negative"}`} key={`${trade.id}-${idx}`}>
+          <div className={`trade-card ${trade.traderScore == null ? "" : trade.traderScore >= 0 ? "trade-positive" : "trade-negative"}`} key={`${trade.id}-${idx}`}>
             <div className="trade-card-top">
-              <Link href={`/account/${trade.traderSlug}`} style={{ color: '#00b7ff', textDecoration: 'underline', cursor: 'pointer' }}>{trade.traderName}</Link>
-              <span className={`pill compact-pill ${trade.traderScore >= 0 ? "positive-pill" : "negative-pill"}`}>{trade.side}</span>
+              {trade.traderSlug === "unknown" ? trade.traderName : <Link href={`/account/${trade.traderSlug}`} style={{ color: '#00b7ff', textDecoration: 'underline', cursor: 'pointer' }}>{trade.traderName}</Link>}
+              <span className="pill compact-pill">{trade.side}</span>
             </div>
             <p>{trade.marketTitle}</p>
             <div className="trade-meta muted">
@@ -89,7 +89,7 @@ export function RecentTrades({ items, detailed = false }: { items: RecentTrade[]
                 {platformLogo(trade.platform)}
                 {trade.platform}
               </span><span>{formatAmount(trade.sizeUsd)}</span>
-              <span className={trade.traderScore >= 0 ? "positive" : "negative"}>{trade.traderScore >= 0 ? `+${trade.traderScore.toFixed(2)}` : trade.traderScore.toFixed(2)}</span>
+              {trade.traderScore != null && <span className={trade.traderScore >= 0 ? "positive" : "negative"}>{trade.traderScore >= 0 ? `+${trade.traderScore.toFixed(2)}` : trade.traderScore.toFixed(2)}</span>}
               <span>{trade.timestamp}</span>
             </div>
           </div>
@@ -288,13 +288,13 @@ export function RecentTradesTable({ items, limit = 20 }: { items: RecentTrade[];
               const trader = getTraderProfile(trade.traderSlug);
               const avatar = trade.avatarUrl || trader?.avatarUrl || `https://api.dicebear.com/9.x/glass/svg?seed=${encodeURIComponent(trade.traderSlug.trim())}`;
               const displayVal = metric === "sharpe"
-                ? (trader?.sharpe ?? trade.traderScore)
-                : (trader?.smartScore ?? trade.traderScore * 20 + 50);
-              const displayFmt = metric === "sharpe" ? displayVal.toFixed(2) : displayVal.toFixed(1);
-              const isProfitable = (trader?.sharpe ?? trade.traderScore) >= 0;
-              const scoreColor = isProfitable ? "#3ecf73" : "#ff5c5c";
-              const rowBg = isProfitable ? "rgba(30,80,50,0.35)" : "rgba(80,25,25,0.3)";
-              const rowBgHover = isProfitable ? "rgba(30,80,50,0.5)" : "rgba(80,25,25,0.45)";
+                ? (trader?.sharpe ?? trade.traderSharpe ?? trade.traderScore)
+                : (trader?.smartScore ?? (trade.traderScore == null ? undefined : trade.traderScore * 20 + 50));
+              const displayFmt = displayVal == null ? "—" : metric === "sharpe" ? displayVal.toFixed(2) : displayVal.toFixed(1);
+              const isProfitable = displayVal == null ? null : displayVal >= 0;
+              const scoreColor = isProfitable == null ? "var(--muted)" : isProfitable ? "#3ecf73" : "#ff5c5c";
+              const rowBg = isProfitable == null ? "transparent" : isProfitable ? "rgba(30,80,50,0.35)" : "rgba(80,25,25,0.3)";
+              const rowBgHover = isProfitable == null ? "rgba(255,255,255,0.04)" : isProfitable ? "rgba(30,80,50,0.5)" : "rgba(80,25,25,0.45)";
 
               return (
                 <tr
@@ -307,24 +307,30 @@ export function RecentTradesTable({ items, limit = 20 }: { items: RecentTrade[];
                   <td style={td}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       {/* Avatar */}
-                      <Link href={`/account/${trade.traderSlug}`} style={{ flexShrink: 0 }}>
+                      {trade.traderSlug === "unknown" ? <span style={{ flexShrink: 0 }}>
                         <Image
                           src={avatar} alt={trade.traderName}
                           width={32} height={32} unoptimized
                           style={{ borderRadius: "50%", width: 32, height: 32, display: "block" }}
                         />
-                      </Link>
+                      </span> : <Link href={`/account/${trade.traderSlug}`} style={{ flexShrink: 0 }}>
+                        <Image
+                          src={avatar} alt={trade.traderName}
+                          width={32} height={32} unoptimized
+                          style={{ borderRadius: "50%", width: 32, height: 32, display: "block" }}
+                        />
+                      </Link>}
                       {/* Name + PM badge + score */}
                       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "nowrap" }}>
-                        <Link href={`/account/${trade.traderSlug}`}
+                        {trade.traderSlug === "unknown" ? <span style={{ color: "#ffffff", fontWeight: 600, fontSize: "0.9rem", whiteSpace: "nowrap" }}>{trade.traderName}</span> : <Link href={`/account/${trade.traderSlug}`}
                           style={{ color: "#ffffff", fontWeight: 600, fontSize: "0.9rem", textDecoration: "none", whiteSpace: "nowrap" }}
                           onMouseOver={e => (e.currentTarget.style.textDecoration = "underline")}
                           onMouseOut={e => (e.currentTarget.style.textDecoration = "none")}>
                           {trade.traderName}
-                        </Link>
+                        </Link>}
                         <PlatformLogoBadge platform={trade.platform} />
                         <span style={{ color: scoreColor, fontWeight: 700, fontSize: "0.9rem", whiteSpace: "nowrap" }}>
-                          {isProfitable ? displayFmt : displayFmt}
+                          {displayFmt}
                         </span>
                       </div>
                     </div>

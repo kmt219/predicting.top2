@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       asOf: new Date().toISOString(),
+      source: "sample",
       totalMarkets: filteredItems.length,
       totalPositions: filteredItems.reduce((acc, item) => acc + item.traders.length, 0),
       items: filteredItems

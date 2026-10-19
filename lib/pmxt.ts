@@ -103,7 +103,7 @@ async function pmxtFetch(
   }
 
   const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${apiKey}` },
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
     // Cache for 60s on the server
     next: { revalidate: 60 },
   });
@@ -113,34 +113,11 @@ async function pmxtFetch(
     throw new Error(`PMXT ${exchange}/${method} → ${res.status}: ${text.slice(0, 200)}`);
   }
 
-  return res.json();
-}
-
-// Call PMXT REST API (POST) — used for fetchOrderBook with args
-async function pmxtPost(
-  exchange: PMXTExchange,
-  method: string,
-  body: unknown
-) {
-  const apiKey = process.env.PMXT_API_KEY;
-  if (!apiKey) throw new Error("PMXT_API_KEY not set");
-
-  const res = await fetch(`${PMXT_API_BASE}/${exchange}/${method}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-    next: { revalidate: 60 },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`PMXT POST ${exchange}/${method} → ${res.status}: ${text.slice(0, 200)}`);
+  const payload = await res.json();
+  if (payload?.success === false) {
+    throw new Error(`PMXT ${exchange}/${method}: ${payload.error?.message ?? "request failed"}`);
   }
-
-  return res.json();
+  return payload;
 }
 
 // Format a USD number to a readable label
@@ -189,10 +166,7 @@ function mapMarket(m: PMXTUnifiedMarket, platform: PlatformCode, livePrice?: num
   const volumeTotal = m.volume ?? 0;
   const displayVol = volume24h > 0 ? volume24h : volumeTotal;
 
-  const momentum =
-    volume24h > 0
-      ? `+$${Math.round(volume24h * 0.04).toLocaleString()}`
-      : "+$0";
+  const momentum = "—";
 
   return {
     slug: m.slug || m.marketId || `${platform}-${(m.title ?? "").slice(0, 40).replace(/\s+/g, "-").toLowerCase()}`,
@@ -201,20 +175,7 @@ function mapMarket(m: PMXTUnifiedMarket, platform: PlatformCode, livePrice?: num
     volumeLabel: fmtVolume(displayVol),
     momentum,
     probability: prob >= 0 ? prob : null,
-    traders: [
-      {
-        name: "alpha",
-        txs: "—",
-        inflow: Math.round(displayVol * 0.02),
-        last: "live",
-      },
-      {
-        name: "beta",
-        txs: "—",
-        inflow: Math.round(displayVol * 0.01),
-        last: "live",
-      },
-    ],
+    traders: [],
     url: m.url ?? `https://polymarket.com`,
     endsIn: fmtEndsIn(m.resolutionDate, m.status),
   };
@@ -258,8 +219,10 @@ export async function fetchPMXTMarkets(query?: string): Promise<TrendingMarket[]
     );
 
     const all: TrendingMarket[] = [];
+    let successfulExchanges = 0;
     for (const r of results) {
       if (r.status === "fulfilled") {
+        successfulExchanges += 1;
         all.push(...r.value);
       } else {
         console.error("[PMXT] Exchange error:", r.reason?.message ?? r.reason);
@@ -283,6 +246,10 @@ export async function fetchPMXTMarkets(query?: string): Promise<TrendingMarket[]
       return true;
     });
 
+    if (successfulExchanges === 0) {
+      throw new Error("PMXT could not return market data from any exchange");
+    }
+
     const sorted = deduped.sort((a, b) => parseVol(b.volumeLabel) - parseVol(a.volumeLabel)).slice(0, 24);
     if (sorted.length > 0) {
       setCache(cacheKey, sorted);
@@ -290,7 +257,9 @@ export async function fetchPMXTMarkets(query?: string): Promise<TrendingMarket[]
     return sorted;
   } catch (err) {
     console.error("[PMXT] fetchPMXTMarkets error, using cache fallback:", err);
-    return getCacheIncludingExpired(cacheKey) || [];
+    const stale = getCacheIncludingExpired(cacheKey);
+    if (stale) return stale;
+    throw err;
   }
 }
 
@@ -309,12 +278,17 @@ export async function fetchPMXTRecentTrades(): Promise<RecentTrade[]> {
     });
     const topMarkets: PMXTUnifiedMarket[] = marketsData?.data ?? [];
 
-    if (topMarkets.length === 0) return getCacheIncludingExpired(cacheKey) || [];
+    if (topMarkets.length === 0) {
+      const stale = getCacheIncludingExpired(cacheKey);
+      if (stale) return stale;
+      throw new Error("PMXT returned no active Polymarket markets");
+    }
 
     // Step 2: For each market, fetch recent trades for the YES outcome token
     // Use sequential requests with a small delay to avoid rate limiting
     const allTrades: RecentTrade[] = [];
     let tradeIndex = 0;
+    let successfulOutcomeRequests = 0;
 
     for (const market of topMarkets) {
       const yesOutcome =
@@ -327,9 +301,11 @@ export async function fetchPMXTRecentTrades(): Promise<RecentTrade[]> {
       await new Promise((r) => setTimeout(r, 200));
 
       try {
-        const resp = await pmxtPost("polymarket", "fetchTrades", {
-          args: [tokenId, { limit: 8 }],
+        const resp = await pmxtFetch("polymarket", "fetchTrades", {
+          outcomeId: tokenId,
+          limit: "8",
         });
+        successfulOutcomeRequests += 1;
 
         // PMXT wraps response in { success, data } envelope
         const trades = Array.isArray(resp) ? resp : (resp?.data ?? []);
@@ -340,38 +316,44 @@ export async function fetchPMXTRecentTrades(): Promise<RecentTrade[]> {
           // amount = shares, price = 0-1 price → sizeUsd = shares * price
           const sizeUsd = (t.amount ?? t.size ?? 0) * (t.price ?? 0);
           if (sizeUsd <= 0) continue;
-          const sideRaw = (t.side ?? t.takerSide ?? "").toLowerCase();
-          const side: "YES" | "NO" = sideRaw === "no" || sideRaw === "sell" ? "NO" : "YES";
-          const trader = t.taker ?? t.maker ?? t.trader ?? "";
-          const ts = t.timestamp
-            ? new Date(
-                typeof t.timestamp === "number"
-                  ? t.timestamp
-                  : Number(t.timestamp)
-              ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-            : "live";
+          const rawTimestamp = t.timestamp;
+          const timestamp = typeof rawTimestamp === "number" || (typeof rawTimestamp === "string" && /^\d+$/.test(rawTimestamp))
+            ? Number(rawTimestamp)
+            : Number.NaN;
+          const timestampMs = Number.isFinite(timestamp)
+            ? (timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp)
+            : typeof rawTimestamp === "string" ? Date.parse(rawTimestamp) : Number.NaN;
+          const ts = Number.isFinite(timestampMs)
+            ? new Date(timestampMs).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+            : "Unknown time";
+          const trader = t.trader ?? t.maker ?? t.taker ?? "";
+          const tradeSide = (t.side ?? "buy").toLowerCase();
 
           allTrades.push({
             id: t.id ?? t.tradeId ?? `pmxt-${tradeIndex++}`,
-            traderSlug: trader,
+            traderSlug: trader || "unknown",
             traderName: trader
               ? (trader.startsWith("0x") && trader.length > 12
                   ? `${trader.slice(0, 6)}…${trader.slice(-4)}`
                   : trader)
-              : `Trader ${tradeIndex}`,
+              : "Unknown trader",
             marketTitle: market.title,
-            side,
+            side: "YES",
             sizeUsd,
             timestamp: ts,
             platform: "PM",
             price: Math.round((t.price ?? 0) * 100),
-            traderScore: sizeUsd > 5000 ? 1 : -1,
             category: market.category ?? "Markets",
+            type: tradeSide === "sell" ? "sell" : "buy",
           } satisfies RecentTrade);
         }
       } catch (err) {
         console.error(`[PMXT] fetchTrades for ${tokenId}:`, err);
       }
+    }
+
+    if (successfulOutcomeRequests === 0) {
+      throw new Error("PMXT could not return trade data for the active markets");
     }
 
     const sorted = allTrades.sort((a, b) => b.sizeUsd - a.sizeUsd).slice(0, 20);
@@ -381,7 +363,9 @@ export async function fetchPMXTRecentTrades(): Promise<RecentTrade[]> {
     return sorted;
   } catch (err) {
     console.error("[PMXT] fetchPMXTRecentTrades error, using cache fallback:", err);
-    return getCacheIncludingExpired(cacheKey) || [];
+    const stale = getCacheIncludingExpired(cacheKey);
+    if (stale) return stale;
+    throw err;
   }
 }
 
@@ -410,8 +394,9 @@ export async function fetchPMXTPositions(): Promise<PositionMarket[]> {
       await new Promise((r) => setTimeout(r, 200));
 
       try {
-        const resp = await pmxtPost("polymarket", "fetchTrades", {
-          args: [tokenId, { limit: 20 }],
+        const resp = await pmxtFetch("polymarket", "fetchTrades", {
+          outcomeId: tokenId,
+          limit: "20",
         });
         const trades = Array.isArray(resp) ? resp : (resp?.data ?? []);
         if (!Array.isArray(trades) || trades.length === 0) continue;
@@ -500,8 +485,9 @@ export async function fetchTopTraders(): Promise<{
       await new Promise((r) => setTimeout(r, 200));
 
       try {
-        const resp = await pmxtPost("polymarket", "fetchTrades", {
-          args: [tokenId, { limit: 15 }],
+        const resp = await pmxtFetch("polymarket", "fetchTrades", {
+          outcomeId: tokenId,
+          limit: "15",
         });
         const trades = Array.isArray(resp) ? resp : (resp?.data ?? []);
         if (!Array.isArray(trades)) continue;

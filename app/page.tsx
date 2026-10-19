@@ -175,7 +175,7 @@ export default function HomePage() {
                 margin: "5px 0 2px 0",
                 fontFamily: "Inter, var(--font-sans), sans-serif",
                 fontWeight: 500
-              }}>Track the Top Prediction Traders in Realtime</p>
+              }}>Live market data from PMXT · sample trader rankings</p>
               <p style={{
                 fontSize: "0.75rem",
                 color: "var(--muted)",
@@ -237,7 +237,7 @@ export default function HomePage() {
                   fontFamily: "Inter, var(--font-sans), sans-serif"
                 }}>
                   Today:{" "}
-                  <span style={{ color: dailyProfit != null && dailyProfit >= 0 ? "var(--green)" : "var(--red)" }}>
+                  <span style={{ color: dailyProfit == null ? "var(--muted)" : dailyProfit >= 0 ? "var(--green)" : "var(--red)" }}>
                     {dailyProfit != null
                       ? (dailyProfit >= 0 ? "+" : "") + new Intl.NumberFormat("en-US", {
                           style: "currency",
@@ -245,7 +245,7 @@ export default function HomePage() {
                           minimumFractionDigits: 0,
                           maximumFractionDigits: 0
                         }).format(dailyProfit)
-                      : "-$264,168"}
+                      : "—"}
                   </span>
                 </div>
               </div>

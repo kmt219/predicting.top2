@@ -58,7 +58,7 @@ export interface RecentTrade {
   timestamp: string;
   platform: PlatformCode;
   price: number;
-  traderScore: number;
+  traderScore?: number;
   category: string;
   type?: "buy" | "sell";
   traderSharpe?: number;
